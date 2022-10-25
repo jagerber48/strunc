@@ -1,0 +1,14 @@
+uncertainties-py23/
+*.pyc
+build
+doc/_build
+dist
+MANIFEST
+# Created by setuptools:
+uncertainties.egg-info/
+# For PyCharm (contains project files):
+.idea/
+# py.test cache files (normally we are using nose though)
+.cache
+# vim temporary files
+.*.swp
