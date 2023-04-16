@@ -75,9 +75,7 @@ class FormatType(Enum):
 
 @dataclass
 class FormatSpecData:
-    fill: str = ' '
-    align: str = '>'
-    min_width: int = 0
+    top_digit: int = 0
     sign_symbol_rule: str = '-'
     grouping_char: str = ''
     num_sig_figs: int = AUTO_SIG_FIGS
@@ -88,7 +86,9 @@ class FormatSpecData:
     display_mode: DisplayMode = DisplayMode.STANDARD
 
 
-def get_top_and_bottom_digit(num: float):
+def get_top_and_bottom_digit(num: float) -> tuple[int, int]:
+    if num == np.nan or num == np.inf or num == -np.inf:
+        return 0, 0
     num = abs(num)
     max_digits = sys.float_info.dig
     int_part = int(num)
@@ -113,12 +113,14 @@ def get_top_and_bottom_digit(num: float):
     else:
         top_digit = 0
 
+    logger.debug(f'{top_digit=}')
+    logger.debug(f'{bottom_digit=}')
     return top_digit, bottom_digit
 
 
 pattern = re.compile(r'''
                          ^
-                         (?P<min_width>\d+)?
+                         (?P<top_digit>\d+)?
                          (?P<sign_symbol_rule>[-+ ])?  
                          (?P<grouping_char>[,_])?
                          (?:\.(?P<num_sig_figs>\d+))?
@@ -133,7 +135,11 @@ pattern = re.compile(r'''
 def parse_format_spec(format_spec: str) -> FormatSpecData:
     match = pattern.match(format_spec)
 
-    min_width = match.group('min_width') or 0
+    top_digit = match.group('top_digit')
+    if top_digit is not None:
+        top_digit = int(top_digit)
+    else:
+        top_digit = 0
     sign_symbol_rule = match.group('sign_symbol_rule') or '-'
     grouping_char = match.group('grouping_char') or ''
     num_sig_figs = match.group('num_sig_figs')
@@ -157,7 +163,7 @@ def parse_format_spec(format_spec: str) -> FormatSpecData:
     else:
         display_mode = DisplayMode.STANDARD
 
-    format_spec_data = FormatSpecData(min_width=min_width,
+    format_spec_data = FormatSpecData(top_digit=top_digit,
                                       sign_symbol_rule=sign_symbol_rule,
                                       grouping_char=grouping_char,
                                       num_sig_figs=num_sig_figs,
@@ -206,6 +212,7 @@ def get_sig_fig_driver(val: float, unc: float,
 def get_pdg_num_sig_figs_and_rounded_unc(unc: float) -> (int, float):
     top_digit, _ = get_top_and_bottom_digit(unc)
     unc_rounded_1 = round(unc, -top_digit + 2)
+    top_digit, _ = get_top_and_bottom_digit(unc_rounded_1)
     top_three_dig = round(unc_rounded_1*10**(-top_digit + 2), 0)
     if 100 <= top_three_dig <= 354:
         num_sig_figs = 2
@@ -223,9 +230,10 @@ def get_pdg_num_sig_figs_and_rounded_unc(unc: float) -> (int, float):
     return num_sig_figs, updated_unc
 
 
-def get_val_unc_rounded(val: float, unc: float,
-                        sig_fig_driver: DriverType,
-                        num_sig_figs: int) -> (float, float, int):
+def round_val_unc_to_sig_figs(val: float, unc: float,
+                              sig_fig_driver: DriverType,
+                              num_sig_figs: int) -> (float, float, int):
+    logger.debug(f'{num_sig_figs=}')
     if sig_fig_driver == DriverType.UNCERTAINTY:
         if num_sig_figs == AUTO_SIG_FIGS:
             num_sig_figs, unc = get_pdg_num_sig_figs_and_rounded_unc(unc)
@@ -238,11 +246,13 @@ def get_val_unc_rounded(val: float, unc: float,
             else:
                 bottom_digit = 0
         else:
-            top_digit, _ = get_top_and_bottom_digit(unc)
+            top_digit, _ = get_top_and_bottom_digit(val)
+            logger.debug(f'{top_digit=}')
             bottom_digit = top_digit - num_sig_figs + 1
     else:
         bottom_digit = 0
 
+    logger.debug(f'{bottom_digit=}')
     val_rounded = round(val, -bottom_digit)
     unc_rounded = round(unc, -bottom_digit)
 
@@ -295,11 +305,21 @@ def get_exp(val: float, unc: float, exp_driver: DriverType,
     return 0
 
 
-def float_mantissa_to_str(mantissa, exp, bottom_digit, min_width,
+def float_mantissa_to_str(mantissa, exp, bottom_digit, top_digit_target,
                           sign_symbol_rule, grouping_char):
+    logger.debug('float_mantissa_to_str()')
+    logger.debug(f'{mantissa=}')
+    logger.debug(f'{top_digit_target=}')
     prec = max(-(bottom_digit - exp), 0)
-    format_str = f'0={min_width}{grouping_char}.{prec}f'
+    format_str = f'{grouping_char}.{prec}f'
     abs_mantissa_str = f'{abs(mantissa):{format_str}}'
+
+    top_digit, _ = get_top_and_bottom_digit(mantissa*10**exp)
+    top_digit = max(top_digit, 0)
+    logger.debug(f'{top_digit=}')
+    if top_digit_target > top_digit:
+        zero_pad_str = '0'*(top_digit_target - top_digit)
+        abs_mantissa_str = f'{zero_pad_str}{abs_mantissa_str}'
 
     if mantissa < 0:
         sign_str = '-'
@@ -329,9 +349,10 @@ def get_val_unc_exp_str(val_str: str, unc_str: str, exp: int,
                         format_type: FormatType,
                         display_mode: DisplayMode):
     if short_form:
-        unc_str = unc_str.lstrip('0')
-        unc_str = unc_str.lstrip('.')
-        unc_str = unc_str.lstrip('0')
+        if unc_str != '0':
+            unc_str = unc_str.lstrip('0')
+            unc_str = unc_str.lstrip('.')
+            unc_str = unc_str.lstrip('0')
         unc_str = f'({unc_str})'
         val_unc_str = f'{val_str}{unc_str}'
     else:
@@ -358,6 +379,15 @@ def get_val_unc_exp_str(val_str: str, unc_str: str, exp: int,
 
 def format_val_unc(val: float, unc: float,
                    format_spec_data: FormatSpecData) -> str:
+    logger.debug(f'{val=}')
+    logger.debug(f'{unc=}')
+    logger.debug(f'{format_spec_data=}')
+    if np.isnan(val) or not np.isfinite(val) and format_spec_data.short_form:
+        logger.warning(f'short form not valid for nan of inf vals. Disabling '
+                       f'short form.')
+        format_spec_data.short_form = False
+
+
     if unc < 0:
         logger.warning(f'Negative uncertainty {unc}, coercing to positive.')
         unc = abs(unc)
@@ -366,7 +396,7 @@ def format_val_unc(val: float, unc: float,
         val, unc,
         val_sets_sig_figs=format_spec_data.val_sets_sig_figs)
 
-    val_rounded, unc_rounded, bottom_digit = get_val_unc_rounded(
+    val_rounded, unc_rounded, bottom_digit = round_val_unc_to_sig_figs(
         val, unc,
         sig_fig_driver=sig_fig_driver,
         num_sig_figs=format_spec_data.num_sig_figs)
@@ -383,19 +413,31 @@ def format_val_unc(val: float, unc: float,
 
     val_top_digit, _ = get_top_and_bottom_digit(val_mantissa)
     unc_top_digit, _ = get_top_and_bottom_digit(unc_mantissa)
-    top_digit = max(val_top_digit, unc_top_digit)
+    top_digit_target = max(val_top_digit, unc_top_digit,
+                           format_spec_data.top_digit)
 
-    val_mantissa_str = float_mantissa_to_str(val_mantissa, exp, bottom_digit,
-                                             format_spec_data.min_width,
-                                             format_spec_data.sign_symbol_rule,
-                                             format_spec_data.grouping_char)
+    if val == np.nan:
+        val_mantissa_str = 'nan'
+    elif val == np.inf:
+        val_mantissa_str = 'inf'
+    elif val == -np.inf:
+        val_mantissa_str = '-inf'
+    else:
+        val_mantissa_str = float_mantissa_to_str(val_mantissa, exp, bottom_digit,
+                                                 top_digit_target,
+                                                 format_spec_data.sign_symbol_rule,
+                                                 format_spec_data.grouping_char)
     logger.debug(f'{val_mantissa_str=}')
 
-
-    unc_mantissa_str = float_mantissa_to_str(unc_mantissa, exp, bottom_digit,
-                                             format_spec_data.min_width,
-                                             '-',
-                                             format_spec_data.grouping_char)
+    if unc_mantissa == np.nan:
+        unc_mantissa_str = 'nan'
+    elif unc_mantissa == np.inf:
+        unc_mantissa_str = 'inf'
+    else:
+        unc_mantissa_str = float_mantissa_to_str(unc_mantissa, exp, bottom_digit,
+                                                 top_digit_target,
+                                                 '-',
+                                                 format_spec_data.grouping_char)
     logger.debug(f'{unc_mantissa_str=}')
 
     val_unc_exp_str = get_val_unc_exp_str(val_mantissa_str,
@@ -415,20 +457,16 @@ def format(val: float, unc: float, format_spec: str = ''):
 
 
 def main():
-
-    logger.debug('test')
-
-    val = 12.332
-    unc = 1.2
-    fmt_spec = 'vdS'
+    val = 12349234
+    unc = 2352
+    fmt_spec = 'rS'
     val_unc_str = format(val, unc, fmt_spec)
     print(val_unc_str)
 
 
 if __name__ == "__main__":
-    import sys
-    logging.basicConfig(format='%(levelname)s | %(message)s',
+    logging.basicConfig(format='%(levelname)s | %(funcName)s | %(lineno)s | %(message)s',
                         stream=sys.stdout)
-    logger.setLevel(logging.DEBUG)
+    logger.setLevel(logging.WARNING)
 
     main()
