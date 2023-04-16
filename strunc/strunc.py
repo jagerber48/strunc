@@ -260,11 +260,17 @@ def round_val_unc_to_sig_figs(val: float, unc: float,
 
 
 def get_exp_driver(val: float, unc: float,
-                   unc_sets_exp: bool = False) -> DriverType:
+                   unc_sets_exp: bool,
+                   short_form: bool) -> DriverType:
     unc_warned = False
     if unc_sets_exp:
         if np.isfinite(unc):
-            return DriverType.UNCERTAINTY
+            if not short_form:
+                return DriverType.UNCERTAINTY
+            else:
+                logger.warning('Cannot have uncertainty set exponent in short '
+                               'form.')
+                unc_warned=True
         else:
             logger.warning('Cannot use infinite uncertainty to set the '
                            'exponent for value/uncertainty string formatting.')
@@ -276,7 +282,11 @@ def get_exp_driver(val: float, unc: float,
         logger.warning('Cannot use infinite value to set the exponent for '
                        'value/uncertainty string formatting.')
         if np.isfinite(unc):
-            return DriverType.UNCERTAINTY
+            if not short_form:
+                return DriverType.UNCERTAINTY
+            else:
+                logger.warning('Cannot have uncertainty set exponent in short '
+                               'form.')
         elif not unc_warned:
             logger.warning('Cannot use infinite uncertainty to set the '
                            'exponent for value/uncertainty string formatting.')
@@ -290,7 +300,7 @@ def get_exp(val: float, unc: float, exp_driver: DriverType,
 
     if exp_driver is DriverType.VALUE:
         top_digit, _ = get_top_and_bottom_digit(val)
-    elif exp_driver is DriverType.VALUE:
+    elif exp_driver is DriverType.UNCERTAINTY:
         top_digit, _ = get_top_and_bottom_digit(unc)
     else:
         return 0
@@ -317,11 +327,14 @@ def float_mantissa_to_str(mantissa: float, exp: int,
     format_str = f'{grouping_char}.{prec}f'
     abs_mantissa_str = f'{abs(mantissa):{format_str}}'
 
-    top_digit, _ = get_top_and_bottom_digit(mantissa*10**exp)
+    top_digit, _ = get_top_and_bottom_digit(mantissa)
     top_digit = max(top_digit, 0)
+    logger.debug(f'{top_digit_target=}')
     logger.debug(f'{top_digit=}')
     if top_digit_target > top_digit:
-        zero_pad_str = '0'*(top_digit_target - top_digit)
+        num_zeros_to_pad = top_digit_target - top_digit
+        logger.debug(f'Padding {num_zeros_to_pad} zeros')
+        zero_pad_str = '0'*num_zeros_to_pad
         abs_mantissa_str = f'{zero_pad_str}{abs_mantissa_str}'
 
     if mantissa < 0:
@@ -404,7 +417,9 @@ def format_val_unc(val: float, unc: float,
         num_sig_figs=format_spec_data.num_sig_figs)
 
     exp_driver = get_exp_driver(val, unc,
-                                unc_sets_exp=format_spec_data.unc_sets_exp)
+                                unc_sets_exp=format_spec_data.unc_sets_exp,
+                                short_form=format_spec_data.short_form)
+    logger.debug(f'{exp_driver=}')
     exp = get_exp(val_rounded, unc_rounded, exp_driver=exp_driver,
                   format_type=format_spec_data.format_type)
     logger.debug(f'{exp=}')
@@ -457,9 +472,9 @@ def format_val_unc_from_str(val: float, unc: float, format_spec: str = ''):
 
 
 def main():
-    val = 12349234
-    unc = 2352
-    fmt_spec = 'rS'
+    val = 123.456
+    unc = 0.789
+    fmt_spec = '.3ue'
     val_unc_str = format_val_unc_from_str(val, unc, fmt_spec)
     print(val_unc_str)
 
@@ -468,6 +483,6 @@ if __name__ == "__main__":
     logging.basicConfig(
         format='%(levelname)s | %(funcName)s | %(lineno)s | %(message)s',
         stream=sys.stdout)
-    logger.setLevel(logging.WARNING)
+    logger.setLevel(logging.DEBUG)
 
     main()
