@@ -305,8 +305,11 @@ def get_exp(val: float, unc: float, exp_driver: DriverType,
     return 0
 
 
-def float_mantissa_to_str(mantissa, exp, bottom_digit, top_digit_target,
-                          sign_symbol_rule, grouping_char):
+def float_mantissa_to_str(mantissa: float, exp: int,
+                          bottom_digit: int, top_digit_target: int,
+                          sign_symbol_rule: str, grouping_char: str):
+    # TODO clarify whether top and bottom digits are with respect to the
+    #   mantissa or the actual value (i.e. mantissa or mantissa * 10**exp).
     logger.debug('float_mantissa_to_str()')
     logger.debug(f'{mantissa=}')
     logger.debug(f'{top_digit_target=}')
@@ -387,7 +390,6 @@ def format_val_unc(val: float, unc: float,
                        f'short form.')
         format_spec_data.short_form = False
 
-
     if unc < 0:
         logger.warning(f'Negative uncertainty {unc}, coercing to positive.')
         unc = abs(unc)
@@ -423,10 +425,9 @@ def format_val_unc(val: float, unc: float,
     elif val == -np.inf:
         val_mantissa_str = '-inf'
     else:
-        val_mantissa_str = float_mantissa_to_str(val_mantissa, exp, bottom_digit,
-                                                 top_digit_target,
-                                                 format_spec_data.sign_symbol_rule,
-                                                 format_spec_data.grouping_char)
+        val_mantissa_str = float_mantissa_to_str(
+            val_mantissa, exp, bottom_digit, top_digit_target,
+            format_spec_data.sign_symbol_rule, format_spec_data.grouping_char)
     logger.debug(f'{val_mantissa_str=}')
 
     if unc_mantissa == np.nan:
@@ -434,10 +435,9 @@ def format_val_unc(val: float, unc: float,
     elif unc_mantissa == np.inf:
         unc_mantissa_str = 'inf'
     else:
-        unc_mantissa_str = float_mantissa_to_str(unc_mantissa, exp, bottom_digit,
-                                                 top_digit_target,
-                                                 '-',
-                                                 format_spec_data.grouping_char)
+        unc_mantissa_str = float_mantissa_to_str(
+            unc_mantissa, exp, bottom_digit, top_digit_target, '-',
+            format_spec_data.grouping_char)
     logger.debug(f'{unc_mantissa_str=}')
 
     val_unc_exp_str = get_val_unc_exp_str(val_mantissa_str,
@@ -450,7 +450,7 @@ def format_val_unc(val: float, unc: float,
     return val_unc_exp_str
 
 
-def format(val: float, unc: float, format_spec: str = ''):
+def format_val_unc_from_str(val: float, unc: float, format_spec: str = ''):
     format_spec_data = parse_format_spec(format_spec)
     val_unc_exp_str = format_val_unc(val, unc, format_spec_data)
     return val_unc_exp_str
@@ -460,13 +460,14 @@ def main():
     val = 12349234
     unc = 2352
     fmt_spec = 'rS'
-    val_unc_str = format(val, unc, fmt_spec)
+    val_unc_str = format_val_unc_from_str(val, unc, fmt_spec)
     print(val_unc_str)
 
 
 if __name__ == "__main__":
-    logging.basicConfig(format='%(levelname)s | %(funcName)s | %(lineno)s | %(message)s',
-                        stream=sys.stdout)
+    logging.basicConfig(
+        format='%(levelname)s | %(funcName)s | %(lineno)s | %(message)s',
+        stream=sys.stdout)
     logger.setLevel(logging.WARNING)
 
     main()
