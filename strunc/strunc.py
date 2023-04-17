@@ -87,7 +87,7 @@ class FormatSpecData:
 
 
 def get_top_and_bottom_digit(num: float) -> tuple[int, int]:
-    if num == np.nan or num == np.inf or num == -np.inf:
+    if np.isnan(num) or not np.isfinite(num):
         return 0, 0
     num = abs(num)
     max_digits = sys.float_info.dig
@@ -433,7 +433,7 @@ def format_val_unc(val: float, unc: float,
     top_digit_target = max(val_top_digit, unc_top_digit,
                            format_spec_data.top_digit)
 
-    if val == np.nan:
+    if np.isnan(val):
         val_mantissa_str = 'nan'
     elif val == np.inf:
         val_mantissa_str = 'inf'
@@ -445,7 +445,7 @@ def format_val_unc(val: float, unc: float,
             format_spec_data.sign_symbol_rule, format_spec_data.grouping_char)
     logger.debug(f'{val_mantissa_str=}')
 
-    if unc_mantissa == np.nan:
+    if np.isnan(unc_mantissa):
         unc_mantissa_str = 'nan'
     elif unc_mantissa == np.inf:
         unc_mantissa_str = 'inf'
