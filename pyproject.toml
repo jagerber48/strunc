@@ -11,9 +11,6 @@ description = "Format pairs of value/uncertainty floats into scientific notation
 readme = "README.md"
 dynamic = ["version"]
 
-[project.optional-dependencies]
-test = ["uncertainties"]
-
 [tool.setuptools.packages]
 find = {}  # Scan the project directory with the default parameters
 
