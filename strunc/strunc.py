@@ -75,6 +75,7 @@ class FormatType(Enum):
 
 @dataclass
 class FormatSpecData:
+    fill_char: str = ''
     top_digit: int = 0
     sign_symbol_rule: str = '-'
     grouping_char: str = ''
@@ -120,6 +121,7 @@ def get_top_and_bottom_digit(num: float) -> tuple[int, int]:
 
 pattern = re.compile(r'''
                          ^
+                         (?:(?P<fill_char>[ 0])>)?
                          (?P<top_digit>\d+)?
                          (?P<sign_symbol_rule>[-+ ])?  
                          (?P<grouping_char>[,_])?
@@ -135,6 +137,7 @@ pattern = re.compile(r'''
 def parse_format_spec(format_spec: str) -> FormatSpecData:
     match = pattern.match(format_spec)
 
+    fill_char = match.group('fill_char') or ''
     top_digit = match.group('top_digit')
     if top_digit is not None:
         top_digit = int(top_digit)
@@ -163,7 +166,8 @@ def parse_format_spec(format_spec: str) -> FormatSpecData:
     else:
         display_mode = DisplayMode.STANDARD
 
-    format_spec_data = FormatSpecData(top_digit=top_digit,
+    format_spec_data = FormatSpecData(fill_char=fill_char,
+                                      top_digit=top_digit,
                                       sign_symbol_rule=sign_symbol_rule,
                                       grouping_char=grouping_char,
                                       num_sig_figs=num_sig_figs,
@@ -317,6 +321,7 @@ def get_exp(val: float, unc: float, exp_driver: DriverType,
 
 def float_mantissa_to_str(mantissa: float, exp: int,
                           bottom_digit: int, top_digit_target: int,
+                          fill_char: str,
                           sign_symbol_rule: str, grouping_char: str):
     # TODO clarify whether top and bottom digits are with respect to the
     #   mantissa or the actual value (i.e. mantissa or mantissa * 10**exp).
@@ -332,9 +337,9 @@ def float_mantissa_to_str(mantissa: float, exp: int,
     logger.debug(f'{top_digit_target=}')
     logger.debug(f'{top_digit=}')
     if top_digit_target > top_digit:
-        num_zeros_to_pad = top_digit_target - top_digit
-        logger.debug(f'Padding {num_zeros_to_pad} zeros')
-        zero_pad_str = '0'*num_zeros_to_pad
+        pad_len = top_digit_target - top_digit
+        logger.debug(f'Padding {pad_len} \'{fill_char}\'')
+        zero_pad_str = fill_char*pad_len
         abs_mantissa_str = f'{zero_pad_str}{abs_mantissa_str}'
 
     if mantissa < 0:
@@ -366,9 +371,8 @@ def get_val_unc_exp_str(val_str: str, unc_str: str, exp: int,
                         display_mode: DisplayMode):
     if short_form:
         if unc_str != '0':
-            unc_str = unc_str.lstrip('0')
-            unc_str = unc_str.lstrip('.')
-            unc_str = unc_str.lstrip('0')
+            unc_str = unc_str.replace('.', '')
+            unc_str = unc_str.lstrip('0 ')
         unc_str = f'({unc_str})'
         val_unc_str = f'{val_str}{unc_str}'
     else:
@@ -442,6 +446,7 @@ def format_val_unc(val: float, unc: float,
     else:
         val_mantissa_str = float_mantissa_to_str(
             val_mantissa, exp, bottom_digit, top_digit_target,
+            format_spec_data.fill_char,
             format_spec_data.sign_symbol_rule, format_spec_data.grouping_char)
     logger.debug(f'{val_mantissa_str=}')
 
@@ -451,7 +456,9 @@ def format_val_unc(val: float, unc: float,
         unc_mantissa_str = 'inf'
     else:
         unc_mantissa_str = float_mantissa_to_str(
-            unc_mantissa, exp, bottom_digit, top_digit_target, '-',
+            unc_mantissa, exp, bottom_digit, top_digit_target,
+            format_spec_data.fill_char,
+            '-',
             format_spec_data.grouping_char)
     logger.debug(f'{unc_mantissa_str=}')
 
