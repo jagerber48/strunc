@@ -270,7 +270,7 @@ def get_exp_driver(val: float, unc: float,
             else:
                 logger.warning('Cannot have uncertainty set exponent in short '
                                'form.')
-                unc_warned=True
+                unc_warned = True
         else:
             logger.warning('Cannot use infinite uncertainty to set the '
                            'exponent for value/uncertainty string formatting.')
