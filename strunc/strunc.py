@@ -1,6 +1,7 @@
 import sys
 from math import log10, floor
 import re
+from typing import Optional
 from dataclasses import dataclass
 from enum import Enum
 import logging
@@ -86,7 +87,7 @@ class FormatSpecData:
 
 
 def get_top_and_bottom_digit(num: float) -> tuple[int, int]:
-    if np.isnan(num) or not np.isfinite(num):
+    if not np.isfinite(num):
         return 0, 0
     num = abs(num)
     max_digits = sys.float_info.dig
@@ -112,8 +113,6 @@ def get_top_and_bottom_digit(num: float) -> tuple[int, int]:
     else:
         top_digit = 0
 
-    logger.debug(f'{top_digit=}')
-    logger.debug(f'{bottom_digit=}')
     return top_digit, bottom_digit
 
 
@@ -132,6 +131,10 @@ pattern = re.compile(r'''
 
 def parse_format_spec(format_spec: str) -> FormatSpecData:
     match = pattern.match(format_spec)
+    if match is None:
+        logger.warning(f'Invalid format_spec: \'{format_spec}\'. Formatting '
+                       'with format_spec=\'\'.')
+        match = pattern.match('')
 
     fill_char = match.group('fill_char') or ''
     top_digit = match.group('top_digit')
@@ -176,22 +179,26 @@ class DriverType(Enum):
     NONE = 'none'
     VALUE = 'value'
     UNCERTAINTY = 'uncertainty'
+    UNCERTAINTY_2 = 'uncertainty_2'
 
 
-def get_sig_fig_driver(val: float, unc: float) -> DriverType:
+def get_sig_fig_driver(val: float, unc: float,
+                       unc_2: Optional[float] = None) -> DriverType:
     if np.isfinite(unc) and unc != 0:
         return DriverType.UNCERTAINTY
-    else:
-        logger.warning('Cannot use infinite or zero uncertainty to set the '
-                       'number of significant figures for value/uncertainty '
-                       'string formatting')
-        if np.isfinite(val):
-            logger.warning('Using Value to set then number of significant figures.')
-            return DriverType.VALUE
+    elif unc_2 is not None:
+        if np.isfinite(unc_2) and unc_2 != 0:
+            return DriverType.UNCERTAINTY_2
         else:
-            logger.warning('Cannot use infinite value to set the number of '
-                           'significant figures for value/uncertainty string '
-                           'formatting.')
+            logger.warning('Uncertainty must be finite and non-zero to set the '
+                           'number of significant figures.')
+            if np.isfinite(val):
+                logger.warning('Using value to set the number of significant '
+                               'figures.')
+                return DriverType.VALUE
+            else:
+                logger.warning('Value must be finite and non-zero to set the '
+                               'number of significant figures.')
     return DriverType.NONE
 
 
@@ -246,22 +253,28 @@ def round_val_unc_to_sig_figs(val: float, unc: float,
 
 
 def get_exp_driver(val: float, unc: float,
-                   short_form: bool) -> DriverType:
+                   short_form: bool,
+                   unc_2: Optional[float] = None) -> DriverType:
     if np.isfinite(val):
         return DriverType.VALUE
     else:
-        logger.warning('Cannot use infinite value to set the exponent for '
-                       'value/uncertainty string formatting.')
-        if np.isfinite(unc):
-            if not short_form:
+        logger.warning('Value must be finite to set the exponent.')
+        if not short_form:
+            if np.isfinite(unc):
                 logger.warning('Using uncertainty to set the exponent.')
                 return DriverType.UNCERTAINTY
+            elif unc_2 is not None:
+                if np.isfinite(unc_2):
+                    logger.warning('Using lower uncertainty to set the '
+                                   'exponent.')
+                    return DriverType.UNCERTAINTY_2
             else:
-                logger.warning('Cannot have uncertainty set exponent in short '
-                               'form.')
+                logger.warning('Uncertainty must be finite to set the '
+                               'exponent.')
         else:
-            logger.warning('Cannot use infinite uncertainty to set the '
-                           'exponent for value/uncertainty string formatting.')
+            logger.warning('Uncertainty cannot set the exponent in short '
+                           'form.')
+
     return DriverType.NONE
 
 
@@ -336,7 +349,13 @@ def get_symbs(display_mode: DisplayMode) -> MathSymbs:
 def get_val_unc_exp_str(val_str: str, unc_str: str, exp: int,
                         short_form: bool,
                         format_type: FormatType,
-                        display_mode: DisplayMode):
+                        display_mode: DisplayMode,
+                        unc_2_str: Optional[str] = None):
+    if unc_2_str is not None and short_form:
+        logger.warning('Cannot use short_form with asymmetric uncertainty. '
+                       'Setting short_form=False.')
+        short_form = False
+
     if short_form:
         if unc_str != '0':
             unc_str = unc_str.replace('.', '')
@@ -345,7 +364,12 @@ def get_val_unc_exp_str(val_str: str, unc_str: str, exp: int,
         val_unc_str = f'{val_str}{unc_str}'
     else:
         symbs = get_symbs(display_mode)
-        val_unc_str = f'{val_str}{symbs.pm}{unc_str}'
+        if unc_2_str is None:
+            val_unc_str = f'{val_str}{symbs.pm}{unc_str}'
+        else:
+            val_unc_str = (f'{val_str} '
+                           f'{symbs.l_paren}+{unc_str}, '
+                           f'-{unc_2_str}{symbs.r_paren}')
     if format_type is FormatType.DECIMAL:
         return val_unc_str
     else:
@@ -366,10 +390,14 @@ def get_val_unc_exp_str(val_str: str, unc_str: str, exp: int,
 
 
 def format_val_unc(val: float, unc: float,
-                   format_spec_data: FormatSpecData) -> str:
+                   format_spec_data: FormatSpecData,
+                   unc_2: Optional = None) -> str:
     logger.debug(f'{val=}')
     logger.debug(f'{unc=}')
     logger.debug(f'{format_spec_data=}')
+    logger.debug(f'{unc_2=}')
+
+    asymmetric = unc_2 is not None
 
     if np.isnan(val) or not np.isfinite(val) and format_spec_data.short_form:
         logger.warning(f'short form not valid for nan of inf vals. Disabling '
@@ -379,18 +407,43 @@ def format_val_unc(val: float, unc: float,
     if unc < 0:
         logger.warning(f'Negative uncertainty {unc}, coercing to positive.')
         unc = abs(unc)
+    if asymmetric:
+        if unc_2 < 0:
+            logger.warning(f'Negative lower uncertainty {unc}, coercing to '
+                           f'positive.')
+            unc_2 = abs(unc_2)
 
     sig_fig_driver = get_sig_fig_driver(
-        val, unc)
+        val, unc, unc_2)
     logger.debug(f'{sig_fig_driver=}')
 
-    val_rounded, unc_rounded, bottom_digit = round_val_unc_to_sig_figs(
+    val_rounded_1, unc_rounded, bottom_digit_1 = round_val_unc_to_sig_figs(
         val, unc,
         sig_fig_driver=sig_fig_driver,
         num_sig_figs=format_spec_data.num_sig_figs)
 
+    val_rounded_2 = None
+    unc_2_rounded = None
+    bottom_digit_2 = None
+    if asymmetric:
+        val_rounded_2, unc_2_rounded, bottom_digit_2 = round_val_unc_to_sig_figs(
+            val, unc_2,
+            sig_fig_driver=sig_fig_driver,
+            num_sig_figs=format_spec_data.num_sig_figs)
+    if asymmetric and sig_fig_driver is DriverType.UNCERTAINTY_2:
+        val_rounded = val_rounded_2
+        bottom_digit = bottom_digit_2
+    else:
+        val_rounded = val_rounded_1
+        bottom_digit = bottom_digit_1
+    logger.debug(f'{val_rounded=}')
+    logger.debug(f'{unc_rounded=}')
+    logger.debug(f'{unc_2_rounded=}')
+    logger.debug(f'{bottom_digit=}')
+
     exp_driver = get_exp_driver(val, unc,
-                                short_form=format_spec_data.short_form)
+                                format_spec_data.short_form,
+                                unc_2)
     logger.debug(f'{exp_driver=}')
 
     exp = get_exp(val_rounded, unc_rounded, exp_driver=exp_driver,
@@ -407,6 +460,13 @@ def format_val_unc(val: float, unc: float,
     unc_top_digit, _ = get_top_and_bottom_digit(unc_mantissa)
     top_digit_target = max(val_top_digit, unc_top_digit,
                            format_spec_data.top_digit)
+
+    unc_2_mantissa = None
+    if asymmetric:
+        unc_2_mantissa = unc_2_rounded * 10**-exp
+        unc_2_top_digit, _ = get_top_and_bottom_digit(unc_2_mantissa)
+        top_digit_target = max(top_digit_target, unc_2_top_digit)
+    logger.debug(f'{unc_2_mantissa=}')
 
     if np.isnan(val):
         val_mantissa_str = 'nan'
@@ -433,27 +493,44 @@ def format_val_unc(val: float, unc: float,
             format_spec_data.grouping_char)
     logger.debug(f'{unc_mantissa_str=}')
 
+    unc_2_mantissa_str = None
+    if asymmetric:
+        if np.isnan(unc_2_mantissa):
+            unc_2_mantissa_str = 'nan'
+        elif unc_2_mantissa == np.inf:
+            unc_2_mantissa_str = 'inf'
+        else:
+            unc_2_mantissa_str = float_mantissa_to_str(
+                unc_2_mantissa, exp, bottom_digit, top_digit_target,
+                format_spec_data.fill_char,
+                '-',
+                format_spec_data.grouping_char)
+    logger.debug(f'{unc_2_mantissa_str=}')
+
     val_unc_exp_str = get_val_unc_exp_str(val_mantissa_str,
                                           unc_mantissa_str,
                                           exp,
                                           format_spec_data.short_form,
                                           format_spec_data.format_type,
-                                          format_spec_data.display_mode)
+                                          format_spec_data.display_mode,
+                                          unc_2_mantissa_str)
 
     return val_unc_exp_str
 
 
-def format_val_unc_from_str(val: float, unc: float, format_spec: str = ''):
+def format_val_unc_from_str(val: float, unc: float, format_spec: str = '',
+                            unc_2: Optional[float] = None):
     format_spec_data = parse_format_spec(format_spec)
-    val_unc_exp_str = format_val_unc(val, unc, format_spec_data)
+    val_unc_exp_str = format_val_unc(val, unc, format_spec_data, unc_2)
     return val_unc_exp_str
 
 
 def main():
     val = 123.456
-    unc = 0.789
-    fmt_spec = '.3ue'
-    val_unc_str = format_val_unc_from_str(val, unc, fmt_spec)
+    unc = 0.7
+    unc_2 = None
+    fmt_spec = ''
+    val_unc_str = format_val_unc_from_str(val, unc, fmt_spec, unc_2)
     print(val_unc_str)
 
 
