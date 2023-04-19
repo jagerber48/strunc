@@ -7,7 +7,7 @@ name = "strunc"
 authors = [
     {name = "Justin Gerber", email = "justin.gerber48@gmail.com"},
 ]
-description = "Format pairs of value/uncertainty floats into scientific notations"
+description = "Format value/uncertainty pairs into scientific notations"
 readme = "README.md"
 dynamic = ["version"]
 
