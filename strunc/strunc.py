@@ -80,8 +80,6 @@ class FormatSpecData:
     sign_symbol_rule: str = '-'
     grouping_char: str = ''
     num_sig_figs: int = AUTO_SIG_FIGS
-    val_sets_sig_figs: bool = False
-    unc_sets_exp: bool = False
     format_type: FormatType = FormatType.DECIMAL
     short_form: bool = False
     display_mode: DisplayMode = DisplayMode.STANDARD
@@ -126,8 +124,6 @@ pattern = re.compile(r'''
                          (?P<sign_symbol_rule>[-+ ])?  
                          (?P<grouping_char>[,_])?
                          (?:\.(?P<num_sig_figs>\d+))?
-                         (?P<val_sets_sig_figs>v)?
-                         (?P<unc_sets_exp>u)?
                          (?P<format_type>[derR])?
                          (?P<format_options>S?[P|L]?)?
                          $
@@ -150,8 +146,6 @@ def parse_format_spec(format_spec: str) -> FormatSpecData:
         num_sig_figs = int(num_sig_figs)
     else:
         num_sig_figs = AUTO_SIG_FIGS
-    val_sets_sig_figs = match.group('val_sets_sig_figs') == 'v'
-    unc_sets_exp = match.group('unc_sets_exp') == 'u'
     format_type_str = match.group('format_type') or 'd'
     format_options = match.group('format_options') or ''
 
@@ -171,8 +165,6 @@ def parse_format_spec(format_spec: str) -> FormatSpecData:
                                       sign_symbol_rule=sign_symbol_rule,
                                       grouping_char=grouping_char,
                                       num_sig_figs=num_sig_figs,
-                                      val_sets_sig_figs=val_sets_sig_figs,
-                                      unc_sets_exp=unc_sets_exp,
                                       format_type=format_type,
                                       short_form=short_form,
                                       display_mode=display_mode)
@@ -186,18 +178,7 @@ class DriverType(Enum):
     UNCERTAINTY = 'uncertainty'
 
 
-def get_sig_fig_driver(val: float, unc: float,
-                       val_sets_sig_figs: bool = False) -> DriverType:
-    val_warned = False
-    if val_sets_sig_figs:
-        if np.isfinite(val):
-            return DriverType.VALUE
-        else:
-            logger.warning('Cannot use infinite value to set the number of '
-                           'significant figures for value/uncertainty string '
-                           'formatting.')
-            val_warned = True
-
+def get_sig_fig_driver(val: float, unc: float) -> DriverType:
     if np.isfinite(unc) and unc != 0:
         return DriverType.UNCERTAINTY
     else:
@@ -205,8 +186,9 @@ def get_sig_fig_driver(val: float, unc: float,
                        'number of significant figures for value/uncertainty '
                        'string formatting')
         if np.isfinite(val):
+            logger.warning('Using Value to set then number of significant figures.')
             return DriverType.VALUE
-        elif not val_warned:
+        else:
             logger.warning('Cannot use infinite value to set the number of '
                            'significant figures for value/uncertainty string '
                            'formatting.')
@@ -264,22 +246,7 @@ def round_val_unc_to_sig_figs(val: float, unc: float,
 
 
 def get_exp_driver(val: float, unc: float,
-                   unc_sets_exp: bool,
                    short_form: bool) -> DriverType:
-    unc_warned = False
-    if unc_sets_exp:
-        if np.isfinite(unc):
-            if not short_form:
-                return DriverType.UNCERTAINTY
-            else:
-                logger.warning('Cannot have uncertainty set exponent in short '
-                               'form.')
-                unc_warned = True
-        else:
-            logger.warning('Cannot use infinite uncertainty to set the '
-                           'exponent for value/uncertainty string formatting.')
-            unc_warned = True
-
     if np.isfinite(val):
         return DriverType.VALUE
     else:
@@ -287,11 +254,12 @@ def get_exp_driver(val: float, unc: float,
                        'value/uncertainty string formatting.')
         if np.isfinite(unc):
             if not short_form:
+                logger.warning('Using uncertainty to set the exponent.')
                 return DriverType.UNCERTAINTY
             else:
                 logger.warning('Cannot have uncertainty set exponent in short '
                                'form.')
-        elif not unc_warned:
+        else:
             logger.warning('Cannot use infinite uncertainty to set the '
                            'exponent for value/uncertainty string formatting.')
     return DriverType.NONE
@@ -402,6 +370,7 @@ def format_val_unc(val: float, unc: float,
     logger.debug(f'{val=}')
     logger.debug(f'{unc=}')
     logger.debug(f'{format_spec_data=}')
+
     if np.isnan(val) or not np.isfinite(val) and format_spec_data.short_form:
         logger.warning(f'short form not valid for nan of inf vals. Disabling '
                        f'short form.')
@@ -412,8 +381,8 @@ def format_val_unc(val: float, unc: float,
         unc = abs(unc)
 
     sig_fig_driver = get_sig_fig_driver(
-        val, unc,
-        val_sets_sig_figs=format_spec_data.val_sets_sig_figs)
+        val, unc)
+    logger.debug(f'{sig_fig_driver=}')
 
     val_rounded, unc_rounded, bottom_digit = round_val_unc_to_sig_figs(
         val, unc,
@@ -421,14 +390,16 @@ def format_val_unc(val: float, unc: float,
         num_sig_figs=format_spec_data.num_sig_figs)
 
     exp_driver = get_exp_driver(val, unc,
-                                unc_sets_exp=format_spec_data.unc_sets_exp,
                                 short_form=format_spec_data.short_form)
     logger.debug(f'{exp_driver=}')
+
     exp = get_exp(val_rounded, unc_rounded, exp_driver=exp_driver,
                   format_type=format_spec_data.format_type)
     logger.debug(f'{exp=}')
+
     val_mantissa = val_rounded * 10**-exp
     logger.debug(f'{val_mantissa=}')
+
     unc_mantissa = unc_rounded * 10**-exp
     logger.debug(f'{unc_mantissa=}')
 
