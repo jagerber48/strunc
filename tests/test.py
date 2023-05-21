@@ -96,39 +96,6 @@ cases: dict[float, dict[str, str]] = {
     float('-inf'): {'': '-inf'}
 }
 
-    # ,
-    # FormatTestCase(val=12.34,
-    #                unc=np.nan,
-    #                fmt_str_dict={'': '12.34+/-nan',
-    #                              'u': '12.34+/-nan',
-    #                              'S': '12.34(nan)'}) # TODO Is the the expected/desired behavior?
-    # ,
-    # FormatTestCase(val=12.34,
-    #                unc=np.inf,
-    #                fmt_str_dict={'': '12.34+/-inf',
-    #                              'u': '12.34+/-inf',
-    #                              'S': '12.34(inf)'})
-    # ,
-    # FormatTestCase(val=np.nan,
-    #                unc=12.34,
-    #                fmt_str_dict={'': 'nan+/-12',
-    #                              'u': 'nan+/-12',
-    #                              'S': 'nan+/-12'})
-    # # TODO Is the the expected/desired behavior?
-    # ,
-    # FormatTestCase(val=np.inf,
-    #                unc=12.34,
-    #                fmt_str_dict={'': 'inf+/-12',
-    #                              'u': 'inf+/-12',
-    #                              'S': 'inf+/-12',
-    #                              'v': 'inf+/-12'})
-    # ,
-    # FormatTestCase(val=np.nan,
-    #                unc=np.nan,
-    #                fmt_str_dict={'': 'nan+/-nan',
-    #                              'u': 'nan+/-nan',
-    #                              'S': 'nan+/-nan'})
-
 
 class TestFormatting(unittest.TestCase):
     def test(self):
