@@ -91,6 +91,21 @@ class SignMode(Enum):
             raise ValueError(f'Invalid sign mode flag {flag}.')
 
 
+def get_sign_str(num: float, sign_mode: SignMode) -> str:
+    if num < 0:
+        sign_str = '-'
+    else:
+        if sign_mode is SignMode.ALWAYS:
+            sign_str = '+'
+        elif sign_mode is SignMode.SPACE:
+            sign_str = ' '
+        elif sign_mode is SignMode.NEGATIVE:
+            sign_str = ''
+        else:
+            raise ValueError(f'Invalid sign mode {sign_mode}.')
+    return sign_str
+
+
 class PrecType(Enum):
     SIG_FIG = 'sig_fig'
     PREC = 'prec'
@@ -103,6 +118,34 @@ class PrecType(Enum):
             return PrecType.PREC
         else:
             raise ValueError(f'Invalide precision type flag {flag}.')
+
+
+def get_round_digit(top_digit: int, bottom_digit: int,
+                    prec: int, prec_type: PrecType) -> int:
+    if prec_type is PrecType.SIG_FIG:
+        if prec is None:
+            prec = top_digit - bottom_digit + 1
+        round_digit = top_digit - (prec - 1)
+    elif prec_type is PrecType.PREC:
+        if prec is None:
+            round_digit = bottom_digit
+        else:
+            round_digit = -prec
+    else:
+        raise TypeError(f'Unhandled precision type: {prec_type}.')
+    return round_digit
+
+
+def get_pad_str(top_digit: int, top_padded_digit: int) -> str:
+    if top_padded_digit is not None:
+        if top_padded_digit > top_digit:
+            pad_len = top_padded_digit - max(top_digit, 0)
+            pad_str = '0'*pad_len
+        else:
+            pad_str = ''
+    else:
+        pad_str = ''
+    return pad_str
 
 
 @dataclass
@@ -172,6 +215,10 @@ def pformat_float(num: float, fmt: str) -> str:
 
     top_digit, bottom_digit = get_top_and_bottom_digit(num)
 
+    '''
+    Get exponent and mantissa. Rescale top and bottom digits to be relative to
+    mantissa instead of num.
+    '''
     if format_type is not FormatType.DECIMAL:
         exp = get_exp(top_digit, format_type)
         top_digit -= exp
@@ -182,43 +229,15 @@ def pformat_float(num: float, fmt: str) -> str:
         mantissa = num
         exp_str = ''
 
-    if prec_type is PrecType.SIG_FIG:
-        if prec is None:
-            prec = top_digit - bottom_digit + 1
-        target_bottom_dig = top_digit - (prec - 1)
-    elif prec_type is PrecType.PREC:
-        if prec is None:
-            target_bottom_dig = bottom_digit
-        else:
-            target_bottom_dig = -prec
-    else:
-        raise TypeError(f'Unhandled precision type: {prec_type}.')
+    round_digit = get_round_digit(top_digit, bottom_digit,
+                                  prec, prec_type)
+    mantissa_rounded = round(mantissa, -round_digit)
 
-    mantissa_rounded = round(mantissa, -target_bottom_dig)
-
-    print_prec = max(0, -target_bottom_dig)
-
+    print_prec = max(0, -round_digit)
     abs_mantissa_str = f'{abs(mantissa_rounded):.{print_prec}f}'
-    if top_padded_digit is not None:
-        if top_padded_digit > top_digit:
-            pad_len = top_padded_digit - max(top_digit, 0)
-            pad_str = '0'*pad_len
-        else:
-            pad_str = ''
-    else:
-        pad_str = ''
 
-    if mantissa < 0:
-        sign_str = '-'
-    else:
-        if sign_mode is SignMode.ALWAYS:
-            sign_str = '+'
-        elif sign_mode is SignMode.SPACE:
-            sign_str = ' '
-        elif sign_mode is SignMode.NEGATIVE:
-            sign_str = ''
-        else:
-            raise ValueError(f'Invalid sign mode {sign_mode}.')
+    sign_str = get_sign_str(num, sign_mode)
+    pad_str = get_pad_str(top_digit, top_padded_digit)
 
     full_mantissa_str = f'{sign_str}{pad_str}{abs_mantissa_str}'
 
