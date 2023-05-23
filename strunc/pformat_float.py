@@ -3,17 +3,32 @@ from typing import Optional
 from dataclasses import dataclass
 from enum import Enum
 import re
-from math import log10, floor, isfinite
+from math import log10, log2, floor, isfinite
 import logging
 
 
 logger = logging.getLogger(__name__)
 
 
-def get_top_and_bottom_digit(num: float) -> tuple[int, int]:
-    if not isfinite(num):
-        return 0, 0
+def get_top_digit(num: float) -> int:
+    num = abs(num)
+    int_part = int(num)
+    if int_part == 0:
+        magnitude = 1
+    else:
+        magnitude = int(log10(int_part)) + 1
+    max_digits = sys.float_info.dig
+    if magnitude >= max_digits:
+        return magnitude
 
+    try:
+        top_digit = floor(log10(num))
+    except ValueError:
+        top_digit = 0
+    return top_digit
+
+
+def get_bottom_digit(num: float) -> int:
     num = abs(num)
     max_digits = sys.float_info.dig
     int_part = int(num)
@@ -23,7 +38,7 @@ def get_top_and_bottom_digit(num: float) -> tuple[int, int]:
         magnitude = int(log10(int_part)) + 1
 
     if magnitude >= max_digits:
-        return magnitude, 0
+        return 0
 
     frac_part = num - int_part
     multiplier = 10 ** (max_digits - magnitude)
@@ -33,14 +48,12 @@ def get_top_and_bottom_digit(num: float) -> tuple[int, int]:
     precision = int(log10(frac_digits))
 
     bottom_digit = -precision
-    if num != 0:
-        top_digit = floor(log10(num))
-    else:
-        top_digit = 0
 
-    logger.debug(f'{top_digit=}')
-    logger.debug(f'{bottom_digit=}')
-    return top_digit, bottom_digit
+    return bottom_digit
+
+
+def get_top_and_bottom_digit(num: float) -> tuple[int, int]:
+    return get_top_digit(num), get_bottom_digit(num)
 
 
 class FormatType(Enum):
@@ -48,6 +61,8 @@ class FormatType(Enum):
     SCIENTIFIC = 'scientific'
     ENGINEERING = 'engineering'
     ENGINEERING_SHIFTED = 'engineering_shifted'
+    BINARY = 'binary'
+    BINARY_IEC = 'binary_iec'
 
     @staticmethod
     def from_flag(flag: str) -> 'FormatType':
@@ -59,19 +74,55 @@ class FormatType(Enum):
             return FormatType.ENGINEERING
         elif flag == 'R':
             return FormatType.ENGINEERING_SHIFTED
+        elif flag == 'b':
+            return FormatType.BINARY
+        elif flag == 'B':
+            return FormatType.BINARY_IEC
         else:
             raise ValueError(f'Invalid format type flag {flag}.')
 
 
-def get_exp(top_digit: int, format_type: FormatType) -> int:
-    if format_type is FormatType.SCIENTIFIC:
-        return top_digit
-    elif format_type is FormatType.ENGINEERING:
-        return (top_digit // 3) * 3
-    elif format_type is FormatType.ENGINEERING_SHIFTED:
-        return ((top_digit + 1) // 3) * 3
+def get_mantissa_exp(num: float, format_type: FormatType) -> (float, int):
+    if num == 0:
+        mantissa = 0
+        exp = 0
+    elif format_type is FormatType.DECIMAL:
+        mantissa = num
+        exp = 0
+    elif (format_type is FormatType.SCIENTIFIC
+            or format_type is FormatType.ENGINEERING
+            or format_type is FormatType.ENGINEERING_SHIFTED):
+        exp = floor(log10(abs(num)))
+        if format_type is FormatType.ENGINEERING:
+            exp = (exp // 3) * 3
+        elif format_type is FormatType.ENGINEERING_SHIFTED:
+            exp = ((exp + 1) // 3) * 3
+        mantissa = num * 10 ** -exp
+    elif (format_type is FormatType.BINARY
+            or format_type is FormatType.BINARY_IEC):
+        exp = floor(log2(abs(num)))
+        if format_type is FormatType.BINARY_IEC:
+            exp = (exp // 10) * 10
+        mantissa = num * 2**-exp
     else:
-        raise TypeError(f'Unhandled format type: {format_type}')
+        raise ValueError(f'Unhandled format type {format_type}')
+
+    return mantissa, exp
+
+
+def get_exp_str(exp: int, format_type: FormatType) -> str:
+    if format_type is format_type.DECIMAL:
+        exp_str = ''
+    elif (format_type is FormatType.SCIENTIFIC
+          or format_type is FormatType.ENGINEERING
+          or format_type is FormatType.ENGINEERING_SHIFTED):
+        exp_str = f'e{exp:+03d}'
+    elif (format_type is FormatType.BINARY
+          or format_type is FormatType.BINARY_IEC):
+        exp_str = f'b{exp:+03d}'
+    else:
+        raise ValueError(f'Unhandled format type {format_type}')
+    return exp_str
 
 
 class SignMode(Enum):
@@ -148,6 +199,24 @@ def get_pad_str(top_digit: int, top_padded_digit: int) -> str:
     return pad_str
 
 
+def format_float_by_top_bottom_dig(num: float,
+                                   target_top_digit: int,
+                                   target_bottom_digit: int,
+                                   sign_mode: SignMode) -> str:
+    num_rounded = round(num, -target_bottom_digit)
+
+    print_prec = max(0, -target_bottom_digit)
+    abs_mantissa_str = f'{abs(num_rounded):.{print_prec}f}'
+
+    num_top_digit, _ = get_top_and_bottom_digit(num_rounded)
+    pad_str = get_pad_str(num_top_digit, target_top_digit)
+
+    sign_str = get_sign_str(num, sign_mode)
+
+    float_str = f'{sign_str}{pad_str}{abs_mantissa_str}'
+    return float_str
+
+
 @dataclass
 class FormatSpec:
     """
@@ -170,9 +239,22 @@ class FormatSpec:
 pattern = re.compile(r'''
                          ^
                          (?P<sign_mode>[-+ ])?  
+                         (?P<trailing_decimal>\#)?                         
+                         (?P<top_pad_digit>\d+)?
+                         (?P<grouping_option>[,_v])?                     
+                         (?:(?P<prec_type>\.|\.\.)(?P<prec>\d+))?
+                         (?P<format_type>[deEhHkK]|sh|SH)?
+                         (?P<prefix_mode>p)?
+                         $
+                      ''', re.VERBOSE)
+
+
+pattern = re.compile(r'''
+                         ^
+                         (?P<sign_mode>[-+ ])?  
                          (?P<top_pad_digit>\d+)?                         
                          (?:(?P<prec_type>[._])(?P<prec>\d+))?
-                         (?P<format_type>[derR])?
+                         (?P<format_type>[derRbB])?
                          $
                       ''', re.VERBOSE)
 
@@ -202,60 +284,45 @@ def parse_format_spec(fmt: str) -> FormatSpec:
     return format_spec
 
 
-def pformat_float(num: float, fmt: str) -> str:
+def pformat_float(num: float, format_spec: FormatSpec) -> str:
     if not isfinite(num):
         return str(num)
 
-    format_spec = parse_format_spec(fmt)
     prec_type = format_spec.prec_type
     prec = format_spec.precision
     format_type = format_spec.format_type
     top_padded_digit = format_spec.top_padded_digit
     sign_mode = format_spec.sign_mode
 
-    top_digit, bottom_digit = get_top_and_bottom_digit(num)
+    mantissa, exp = get_mantissa_exp(num, format_type)
+    exp_str = get_exp_str(exp, format_type)
 
-    '''
-    Get exponent and mantissa. Rescale top and bottom digits to be relative to
-    mantissa instead of num.
-    '''
-    if format_type is not FormatType.DECIMAL:
-        exp = get_exp(top_digit, format_type)
-        top_digit -= exp
-        bottom_digit -= exp
-        mantissa = num * 10**-exp
-        exp_str = f'e{exp:+03d}'
-    else:
-        mantissa = num
-        exp_str = ''
+    top_digit, bottom_digit = get_top_and_bottom_digit(mantissa)
 
     round_digit = get_round_digit(top_digit, bottom_digit,
                                   prec, prec_type)
-    mantissa_rounded = round(mantissa, -round_digit)
 
-    print_prec = max(0, -round_digit)
-    abs_mantissa_str = f'{abs(mantissa_rounded):.{print_prec}f}'
+    mantissa_str = format_float_by_top_bottom_dig(mantissa, top_padded_digit,
+                                                  round_digit, sign_mode)
 
-    sign_str = get_sign_str(num, sign_mode)
-    pad_str = get_pad_str(top_digit, top_padded_digit)
-
-    full_mantissa_str = f'{sign_str}{pad_str}{abs_mantissa_str}'
-
-    full_str = f'{full_mantissa_str}{exp_str}'
+    full_str = f'{mantissa_str}{exp_str}'
     return full_str
 
 
 class pfloat(float):
     def __format__(self, format_spec):
-        return pformat_float(self, format_spec)
+        format_spec_data = parse_format_spec(format_spec)
+        return pformat_float(self, format_spec_data)
 
 
 def main():
-    num = pfloat(0)
-    fmt = '+3.5R'
+    num = pfloat(15000)
+    fmt = '.2B'
     print(f'{num=}')
     print(f'{fmt=}')
-    print(f'{num:{fmt}}')
+    num_fmted = f'{num:{fmt}}'
+    print(num_fmted)
+    # print(replace_prefix(num_fmted))
 
 
 if __name__ == "__main__":

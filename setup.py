@@ -1,26 +1,8 @@
 from setuptools import setup, find_packages
 from pathlib import Path
-import sys
 import re
 
 package = 'strunc'
-
-
-def forbid_publish():
-    """ Prevent users of setup.py from possibly publishing to PyPI.
-    """
-    # 'testarg' is for testing this command
-    blacklist = ['register', 'upload', 'upload_docs', 'testarg']
-
-    for command in blacklist:
-        if command in sys.argv:
-            err_str = ('The input command \'{command}\' has been '
-                       'blacklisted, exiting...')
-            raise RuntimeError(err_str)
-
-
-# This command must run before anything else in this file!
-forbid_publish()
 
 
 def extract_version():
