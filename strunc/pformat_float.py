@@ -236,14 +236,32 @@ class FormatSpec:
     sign_mode: SignMode = SignMode.NEGATIVE
 
 
+std_pattern = re.compile(r'''
+                             ^
+                             (?:(?P<fill>[^{}])?(?P<align>[<>=^]))?
+                             (?P<sign>[+\- ])?
+                             (?P<pos_zero>z)?  
+                             (?P<alternate>\#)?                         
+                             (?P<zero_pad>0)?                         
+                             (?P<width>\d+)?
+                             (?P<grouping_option>[_,])?                     
+                             (?:(?P<prec_type>[.])(?P<prec>\d+))?
+                             (?P<format_type>[eEfFgGn%])?
+                             $
+                          ''', re.VERBOSE)
+
+
 pattern = re.compile(r'''
                          ^
-                         (?P<sign_mode>[-+ ])?  
-                         (?P<trailing_decimal>\#)?                         
-                         (?P<top_pad_digit>\d+)?
-                         (?P<grouping_option>[,_v])?                     
-                         (?:(?P<prec_type>\.|\.\.)(?P<prec>\d+))?
-                         (?P<format_type>[deEhHkK]|sh|SH)?
+                         (?:(?P<fill>[^{}])?(?P<align>[<>=^]))?
+                         (?P<sign>[+\- ])?
+                         (?P<pos_zero>z)?  
+                         (?P<alternate>\#)?                         
+                         (?P<zero_pad>0)?                         
+                         (?P<width>\d+)?
+                         (?P<grouping_option>[_,v])?                     
+                         (?:(?P<prec_type>[.!])(?P<prec>\d+))?
+                         (?P<format_type>[eEfFgGn%hHkK]|sh|SH)?
                          (?P<prefix_mode>p)?
                          $
                       ''', re.VERBOSE)
