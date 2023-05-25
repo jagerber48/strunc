@@ -1,6 +1,6 @@
 import sys
 from typing import Optional
-from math import floor, log10, log2
+from math import floor, log10, log2, isfinite
 import warnings
 import logging
 
@@ -11,6 +11,8 @@ logger = logging.getLogger(__name__)
 
 
 def get_top_digit(num: float) -> int:
+    if not isfinite(num):
+        return 0
     num = abs(num)
     int_part = int(num)
     if int_part == 0:
@@ -29,6 +31,9 @@ def get_top_digit(num: float) -> int:
 
 
 def get_bottom_digit(num: float) -> int:
+    if not isfinite(num):
+        return 0
+
     num = abs(num)
     max_digits = sys.float_info.dig
     int_part = int(num)

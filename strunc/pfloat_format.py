@@ -136,6 +136,10 @@ def pformat_float(num: float, format_spec: FormatSpec) -> str:
     mantissa, exp = get_mantissa_exp(num, format_mode, exp, alternate_mode)
     exp_str = get_exp_str(exp, format_mode, capital_exp_char)
 
+    if format_spec.force_zero_positive:
+        if mantissa == -0.0:
+            mantissa = abs(mantissa)
+
     top_digit, bottom_digit = get_top_and_bottom_digit(mantissa)
     round_digit = get_round_digit(top_digit, bottom_digit,
                                   prec, prec_mode)
