@@ -14,5 +14,5 @@ classifiers = [
 dynamic = ["version", "readme"]
 
 [tool.setuptools.dynamic]
-version = {attr = "sciform.__version__"}
+version = {attr = "strunc.__version__"}
 readme = {file = "README.md"}
