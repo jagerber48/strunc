@@ -1,0 +1,25 @@
+name: Create version tag
+
+on:
+  pull_request_target:
+    types:
+      - closed
+
+jobs:
+  create_version_tag:
+    if: github.event.pull_request.merged
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v3
+    - name: Set up Python 3.10
+      uses: actions/setup-python@v3
+      with:
+        python-version: 3.10
+    - name: Extract version
+      run: |
+        VERSION=$python3 -c \
+          "from importlib.metadata import version; \
+          print(version('strunc'))
+    - name: Create tag
+      run: |
+        git tag $VERSION
