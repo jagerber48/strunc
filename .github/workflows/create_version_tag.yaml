@@ -19,7 +19,7 @@ jobs:
       run: |
         VERSION=$python3 -c \
           "from importlib.metadata import version; \
-          print(version('strunc'))
+          print(version('strunc'))"
     - name: Create tag
       run: |
         git tag $VERSION
