@@ -5,5 +5,3 @@ from strunc.pformat_float import pfloat
 from strunc.prefix_float import prefix_float
 
 __all__ = ['pformat_float', 'prefix_float']
-
-'tests'
