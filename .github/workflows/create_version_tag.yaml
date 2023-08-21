@@ -26,3 +26,4 @@ jobs:
     - name: Create tag
       run: |
         git tag $VERSION
+        git push --tags
