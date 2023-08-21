@@ -1,13 +1,15 @@
 name: Create version tag
 
 on:
-  pull_request_target:
-    types:
-      - closed
+  pull_request:
+    branches: [ "main" ]
+    # pull_request_target:
+    # types:
+      # - closed
 
 jobs:
   create_version_tag:
-    if: github.event.pull_request.merged
+    # if: github.event.pull_request.merged
     runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v3
@@ -26,4 +28,4 @@ jobs:
     - name: Create tag
       run: |
         git tag $VERSION
-        git push --tags
+        git push origin $VERSION
