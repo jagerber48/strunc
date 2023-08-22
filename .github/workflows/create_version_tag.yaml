@@ -39,8 +39,8 @@ jobs:
         echo $VERSION
         git tag
         git tag $VERSION
-        git tag test
+        git tag test_tag
         echo second
         git tag
         /usr/bin/git push origin $VERSION
-        /usr/bin/git push origin test
+        /usr/bin/git push origin test_tag
