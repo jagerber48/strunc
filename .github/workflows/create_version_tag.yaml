@@ -38,6 +38,7 @@ jobs:
         echo first
         git tag
         git tag $VERSION
+        git tag test
         echo second
         git tag
         /usr/bin/git push origin $VERSION
