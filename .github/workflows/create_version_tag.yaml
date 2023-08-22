@@ -25,9 +25,9 @@ jobs:
         pip install -e .
     - name: Extract version
       run: |
-        VERSION=$(python3 -c \
+        VERSION=${(python3 -c \
           "from importlib.metadata import version; \
-          print(version('strunc'))")
+          print(version('strunc'))")}
     - name: Create tag
       run: |
         git config user.name "${GITHUB_ACTOR}"
