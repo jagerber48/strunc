@@ -28,6 +28,7 @@ jobs:
         VERSION=$(python3 -c \
           "from importlib.metadata import version; \
           print(version('strunc'))")
+        echo $VERSION
     - name: Create tag
       run: |
         /usr/bin/git status
