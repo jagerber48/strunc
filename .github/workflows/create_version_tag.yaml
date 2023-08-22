@@ -29,3 +29,4 @@ jobs:
           "from importlib.metadata import version; \
           print(version('strunc'))")
         git tag $VERSION
+        git push $VERSION
