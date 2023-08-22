@@ -36,9 +36,11 @@ jobs:
         /usr/bin/git config user.name "${GITHUB_ACTOR}"
         /usr/bin/git config user.email "${GITHUB_ACTOR}@users.noreply.github.com"
         echo first
+        echo $VERSION
         git tag
         git tag $VERSION
         git tag test
         echo second
         git tag
         /usr/bin/git push origin $VERSION
+        /usr/bin/git push origin test
