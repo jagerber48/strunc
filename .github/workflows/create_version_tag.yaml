@@ -28,16 +28,4 @@ jobs:
         VERSION=$(python3 -c \
           "from importlib.metadata import version; \
           print(version('strunc'))")
-        /usr/bin/git status
-        git remote -v
-        # /usr/bin/git config user.name "${GITHUB_ACTOR}"
-        # /usr/bin/git config user.email "${GITHUB_ACTOR}@users.noreply.github.com"
-        echo first
-        echo $VERSION
-        git tag
         git tag $VERSION
-        git tag test_tag
-        echo second
-        git tag
-        /usr/bin/git push origin $VERSION
-        /usr/bin/git push origin test_tag
