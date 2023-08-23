@@ -1,9 +1,9 @@
 name: Create version tag
 
 on:
-  pull_request_target:
-    types:
-      - closed
+  pull_request:
+    branches: [ "main" ]
+    types: [ "closed" ]
 
 jobs:
   create_version_tag:
@@ -11,6 +11,9 @@ jobs:
     runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v3
+      with:
+        fetch-depth: 0
+        ref: ${{ github.event.pull_request.head.ref }}
     - name: Set up Python 3.10
       uses: actions/setup-python@v3
       with:
@@ -18,12 +21,10 @@ jobs:
     - name: Install package
       run: |
         pip install -e .
-    - name: Extract version
+    - name: Create tag
       run: |
         VERSION=$(python3 -c \
           "from importlib.metadata import version; \
           print(version('strunc'))")
-    - name: Create tag
-      run: |
         git tag $VERSION
-        git push --tags
+        git push origin $VERSION
